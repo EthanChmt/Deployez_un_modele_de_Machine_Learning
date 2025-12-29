@@ -1,5 +1,6 @@
 import joblib
 import pandas as pd
+import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -24,9 +25,24 @@ AVG_SALARY_BY_JOB = {
 def load_model():
     global model
     try:
-        model = joblib.load("app/mon_modele.joblib")
+        # --- BLOC DEBUG ---
+        print(f"DEBUG: Dossier courant : {os.getcwd()}")
+        if os.path.exists("app"):
+            print(f"DEBUG: Contenu dossier app : {os.listdir('app')}")
+            model_path = "app/mon_modele.joblib"
+        else:
+            print("DEBUG: Dossier app introuvable. Recherche à la racine.")
+            print(f"DEBUG: Contenu racine : {os.listdir('.')}")
+            model_path = "mon_modele.joblib"
+        
+        print(f"DEBUG: Tentative de chargement de : {model_path}")
+        # ------------------
+
+        model = joblib.load(model_path)
+        print("✅ Modèle chargé avec succès !")
     except Exception as e:
-        print(f"Erreur chargement modèle: {e}")
+        print(f"❌ ERREUR CRITIQUE chargement modèle: {e}")
+        # On laisse model à None pour déclencher l'erreur 503 explicite plus bas
 
 # Le format des données que TU envoies (Texte et chiffres bruts)
 class EmployeeInput(BaseModel):
