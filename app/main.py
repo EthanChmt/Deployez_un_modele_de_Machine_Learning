@@ -7,44 +7,38 @@ from pydantic import BaseModel
 app = FastAPI(title="Employee Attrition Prediction API", version="1.0.0")
 
 model = None
+load_error = None # Variable pour stocker la raison exacte du plantage
 
-# Les moyennes exactes pour le calcul du ratio salaire
+# Données métiers
 AVG_SALARY_BY_JOB = {
-    'Assistant de Direction': 3239.97, 
-    'Cadre Commercial': 6924.28, 
-    'Consultant': 3237.17, 
-    'Directeur Technique': 16033.55, 
-    'Manager': 7528.76, 
-    'Représentant Commercial': 2626.0, 
-    'Ressources Humaines': 4235.75, 
-    'Senior Manager': 17181.68, 
-    'Tech Lead': 7295.14
+    'Assistant de Direction': 3239.97, 'Cadre Commercial': 6924.28, 'Consultant': 3237.17, 
+    'Directeur Technique': 16033.55, 'Manager': 7528.76, 'Représentant Commercial': 2626.0, 
+    'Ressources Humaines': 4235.75, 'Senior Manager': 17181.68, 'Tech Lead': 7295.14
 }
 
 @app.on_event("startup")
 def load_model():
-    global model
+    global model, load_error
     try:
-        # --- BLOC DEBUG ---
-        print(f"DEBUG: Dossier courant : {os.getcwd()}")
-        if os.path.exists("app"):
-            print(f"DEBUG: Contenu dossier app : {os.listdir('app')}")
-            model_path = "app/mon_modele.joblib"
-        else:
-            print("DEBUG: Dossier app introuvable. Recherche à la racine.")
-            print(f"DEBUG: Contenu racine : {os.listdir('.')}")
-            model_path = "mon_modele.joblib"
+        # Tentative 1 : Chemin standard Docker/Linux
+        path = "app/mon_modele.joblib"
+        if not os.path.exists(path):
+            # Tentative 2 : Racine (au cas où on lance depuis app/)
+            path = "mon_modele.joblib"
         
-        print(f"DEBUG: Tentative de chargement de : {model_path}")
-        # ------------------
-
-        model = joblib.load(model_path)
-        print("✅ Modèle chargé avec succès !")
+        if os.path.exists(path):
+            model = joblib.load(path)
+            print(f"✅ Modèle chargé depuis : {path}")
+        else:
+            raise FileNotFoundError(f"Fichier introuvable. Dossier actuel: {os.getcwd()}, Contenu: {os.listdir('.')}")
+            
     except Exception as e:
-        print(f"❌ ERREUR CRITIQUE chargement modèle: {e}")
-        # On laisse model à None pour déclencher l'erreur 503 explicite plus bas
+        # On capture la VRAIE raison du bug
+        print(f"❌ Erreur chargement: {e}")
+        load_error = str(e)
+        model = None
 
-# Le format des données que TU envoies (Texte et chiffres bruts)
+# Modèle de données
 class EmployeeInput(BaseModel):
     id_employee: int
     age: int
@@ -77,27 +71,19 @@ class EmployeeInput(BaseModel):
 def preprocess_input(data: dict) -> pd.DataFrame:
     df = pd.DataFrame([data])
     
-    # 1. Encodage du texte en chiffres
     df['genre_M'] = (df['genre'] == 'M').astype(int)
     df['heure_supplementaires_Oui'] = (df['heure_supplementaires'] == 'Oui').astype(int)
-    
-    freq_map = {'Non-Travel': 0, 'Travel_Rarely': 1, 'Travel_Frequently': 2, 
-                'Aucun': 0, 'Occasionnel': 1, 'Frequent': 2}
-    # On force à 1 par défaut si inconnu pour éviter le crash
+    freq_map = {'Non-Travel': 0, 'Travel_Rarely': 1, 'Travel_Frequently': 2, 'Aucun': 0, 'Occasionnel': 1, 'Frequent': 2}
     df['frequence_deplacement'] = df['frequence_deplacement'].map(freq_map).fillna(1).astype(int)
 
-    # 2. Calcul des Ratios (Feature Engineering)
     df['ratio_loyaute'] = df.apply(lambda x: x['annees_dans_l_entreprise'] / x['age'] if x['age'] > 0 else 0, axis=1)
     df['ratio_stagnation'] = df['annees_depuis_la_derniere_promotion'] / (df['annees_dans_l_entreprise'] + 1)
-    
     mean_salary = AVG_SALARY_BY_JOB.get(data['poste'], 5000)
     df['ratio_salaire_comparatif'] = df['revenu_mensuel'] / mean_salary
-    
     df['taux_volatilite'] = df['nombre_experiences_precedentes'] / (df['annee_experience_totale'] + 1)
     df['delta_evaluation'] = df['note_evaluation_actuelle'] - df['note_evaluation_precedente']
     df['frustration_trajet'] = df['distance_domicile_travail'] / (df['satisfaction_employee_equilibre_pro_perso'] + 1)
 
-    # 3. Préparation des colonnes finales (Ordre strict)
     expected_columns = [
         'age', 'revenu_mensuel', 'nombre_experiences_precedentes', 
         'annee_experience_totale', 'annees_dans_le_poste_actuel', 
@@ -121,12 +107,10 @@ def preprocess_input(data: dict) -> pd.DataFrame:
     ]
     
     final_df = pd.DataFrame(0, index=[0], columns=expected_columns)
-    
     for col in expected_columns:
         if col in df.columns:
             final_df[col] = df[col]
-            
-    # Activation One-Hot
+
     if f"statut_marital_{data['statut_marital']}" in expected_columns:
         final_df[f"statut_marital_{data['statut_marital']}"] = 1
     if f"departement_{data['departement']}" in expected_columns:
@@ -144,8 +128,9 @@ def health_check():
 
 @app.post("/predict")
 def predict(input_data: EmployeeInput):
+    # Si le modèle a planté, on renvoie la VRAIE erreur au client (le test)
     if not model:
-        raise HTTPException(status_code=503, detail="Model not loaded")
+        raise HTTPException(status_code=503, detail=f"Modele non chargé. Cause: {load_error}")
         
     try:
         features = preprocess_input(input_data.dict())
