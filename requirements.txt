@@ -2,11 +2,6 @@ fastapi
 uvicorn
 pytest
 pytest-cov
-psycopg2-binary
-sqlalchemy
 pandas
 scikit-learn
-fastapi
-uvicorn
-pytest
-pytest-cov
+joblib
