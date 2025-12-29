@@ -3,11 +3,10 @@ import pandas as pd
 import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-
-app = FastAPI(title="Employee Attrition Prediction API", version="1.0.0")
+from contextlib import asynccontextmanager
 
 model = None
-load_error = None # Variable pour stocker la raison exacte du plantage
+load_error = None
 
 # Données métiers
 AVG_SALARY_BY_JOB = {
@@ -16,27 +15,34 @@ AVG_SALARY_BY_JOB = {
     'Ressources Humaines': 4235.75, 'Senior Manager': 17181.68, 'Tech Lead': 7295.14
 }
 
-@app.on_event("startup")
-def load_model():
+# --- NOUVELLE METHODE DE CHARGEMENT (LIFESPAN) ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global model, load_error
+    print("🔄 Démarrage du cycle de vie (Lifespan)...")
     try:
-        # Tentative 1 : Chemin standard Docker/Linux
-        path = "app/mon_modele.joblib"
-        if not os.path.exists(path):
-            # Tentative 2 : Racine (au cas où on lance depuis app/)
+        # On cherche le fichier au bon endroit
+        if os.path.exists("app/mon_modele.joblib"):
+            path = "app/mon_modele.joblib"
+        elif os.path.exists("mon_modele.joblib"):
             path = "mon_modele.joblib"
-        
-        if os.path.exists(path):
-            model = joblib.load(path)
-            print(f"✅ Modèle chargé depuis : {path}")
         else:
-            raise FileNotFoundError(f"Fichier introuvable. Dossier actuel: {os.getcwd()}, Contenu: {os.listdir('.')}")
-            
+            raise FileNotFoundError(f"Fichier introuvable. Dossier: {os.getcwd()}, LS: {os.listdir('.')}")
+
+        model = joblib.load(path)
+        print(f"✅ Modèle chargé avec succès depuis {path} !")
     except Exception as e:
-        # On capture la VRAIE raison du bug
-        print(f"❌ Erreur chargement: {e}")
+        print(f"❌ Erreur critique au chargement : {e}")
         load_error = str(e)
         model = None
+    
+    yield  # L'application tourne ici
+    
+    print("🛑 Arrêt de l'application.")
+    # On pourrait nettoyer la mémoire ici si besoin
+
+# On injecte le lifespan dans l'app
+app = FastAPI(title="Employee Attrition Prediction API", version="1.0.0", lifespan=lifespan)
 
 # Modèle de données
 class EmployeeInput(BaseModel):
@@ -111,6 +117,7 @@ def preprocess_input(data: dict) -> pd.DataFrame:
         if col in df.columns:
             final_df[col] = df[col]
 
+    # One-hot encoding manuel
     if f"statut_marital_{data['statut_marital']}" in expected_columns:
         final_df[f"statut_marital_{data['statut_marital']}"] = 1
     if f"departement_{data['departement']}" in expected_columns:
@@ -128,9 +135,10 @@ def health_check():
 
 @app.post("/predict")
 def predict(input_data: EmployeeInput):
-    # Si le modèle a planté, on renvoie la VRAIE erreur au client (le test)
     if not model:
-        raise HTTPException(status_code=503, detail=f"Modele non chargé. Cause: {load_error}")
+        # On inclut l'erreur dans la réponse pour comprendre pourquoi ça plante
+        detail_msg = f"Modele non chargé. Cause: {load_error if load_error else 'Erreur inconnue (Lifespan non déclenché)'}"
+        raise HTTPException(status_code=503, detail=detail_msg)
         
     try:
         features = preprocess_input(input_data.dict())
