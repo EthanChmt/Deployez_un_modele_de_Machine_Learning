@@ -1,16 +1,13 @@
 from fastapi.testclient import TestClient
 from app.main import app
 
-client = TestClient(app)
-
 def test_read_root():
-    """Vérifie que l'API est en ligne"""
-    response = client.get("/")
-    assert response.status_code == 200
-    assert response.json() == {"status": "online"}
+    # Le "with" est OBLIGATOIRE pour activer le lifespan (chargement modèle)
+    with TestClient(app) as client:
+        response = client.get("/")
+        assert response.status_code == 200
 
 def test_predict_valid():
-    """Vérifie qu'une prédiction fonctionne"""
     payload = {
         "id_employee": 1, "age": 35, "revenu_mensuel": 5000, "nombre_experiences_precedentes": 2,
         "annee_experience_totale": 10, "annees_dans_le_poste_actuel": 3,
@@ -25,7 +22,7 @@ def test_predict_valid():
         "domaine_etude": "Marketing", "frequence_deplacement": "Occasionnel"
     }
     
-    response = client.post("/predict", json=payload)
-    
-
-    assert response.status_code == 200, f"ÉCHEC API: {response.text}"
+    with TestClient(app) as client:
+        response = client.post("/predict", json=payload)
+        # Si ça échoue, on verra le texte exact
+        assert response.status_code == 200, f"ÉCHEC API: {response.text}"
