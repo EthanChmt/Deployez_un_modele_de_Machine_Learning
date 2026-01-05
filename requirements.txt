@@ -8,5 +8,5 @@ joblib==1.5.3
 httpx
 SQLAlchemy
 psycopg2-binary
-
-
+python-dotenv
+dotenv

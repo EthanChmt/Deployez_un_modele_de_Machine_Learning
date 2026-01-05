@@ -10,13 +10,18 @@ from contextlib import asynccontextmanager
 from sqlalchemy import create_engine, Column, Integer, JSON, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.sql import func
+import os
+from dotenv import load_dotenv
+
+# Charge les variables du fichier .env dans l'environnement système
+load_dotenv()
 
 # ==========================================
 # CONFIGURATION DE LA BASE DE DONNÉES
 # ==========================================
 # Paramètres de connexion PostgreSQL
 DB_USER = "postgres"
-DB_PASSWORD = "301002"  # Configuration locale
+DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOST = "localhost"
 DB_PORT = "5432"
 DB_NAME = "attrition_db"
