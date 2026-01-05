@@ -4,10 +4,11 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.sql import func
 import sys
 import os
-
+from dotenv import load_dotenv
+load_dotenv()
 # --- Configuration ---
 DB_USER = "postgres"
-DB_PASSWORD = "301002"
+DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOST = "localhost"
 DB_PORT = "5432"
 DB_NAME = "attrition_db"
