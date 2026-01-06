@@ -3,14 +3,13 @@ import pandas as pd
 import os
 import sys
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from contextlib import asynccontextmanager
 
 # Imports pour la persistance des données (SQLAlchemy)
 from sqlalchemy import create_engine, Column, Integer, JSON, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.sql import func
-import os
 from dotenv import load_dotenv
 
 # Charge les variables du fichier .env dans l'environnement système
@@ -81,6 +80,13 @@ class EmployeeInput(BaseModel):
     heure_supplementaires: str
     domaine_etude: str
     frequence_deplacement: str
+
+class PredictionOutput(BaseModel):
+    """
+    Schéma de sortie standardisé pour les prédictions.
+    """
+    prediction: int = Field(..., description="Classe prédite : 0 (Reste) ou 1 (Part)")
+    probability: float = Field(..., description="Probabilité associée à la classe prédite (en %)")
 
 # ==========================================
 # LOGIQUE MÉTIER & CHARGEMENT DU MODÈLE
@@ -199,14 +205,14 @@ def health_check():
     """Vérification de l'état de l'API."""
     return {"status": "online", "service": "Attrition Prediction API"}
 
-@app.post("/predict")
+@app.post("/predict", response_model=PredictionOutput)
 def predict(input_data: EmployeeInput):
     """
     Endpoint principal de prédiction.
     1. Prétraite les données reçues.
-    2. Exécute le modèle ML.
+    2. Exécute le modèle ML (prédiction + probabilité).
     3. Enregistre la requête et le résultat en base de données (Audit Log).
-    4. Retourne la prédiction.
+    4. Retourne la prédiction et le niveau de confiance.
     """
     if not model:
         detail_msg = f"Service indisponible : Modèle non chargé. Erreur : {load_error}"
@@ -215,7 +221,21 @@ def predict(input_data: EmployeeInput):
     try:
         # 1. Inférence
         features = preprocess_input(input_data.dict())
+        
+        # Prédiction de la classe (0 ou 1)
         prediction_val = int(model.predict(features)[0])
+        
+        # Calcul de la probabilité de confiance
+        if hasattr(model, "predict_proba"):
+            probs = model.predict_proba(features)[0]
+            # On récupère la probabilité associée à la classe prédite
+            confidence = probs[prediction_val]
+        else:
+            # Fallback (100% de confiance si le modèle est déterministe sans proba)
+            confidence = 1.0
+            
+        # Conversion en pourcentage (ex: 0.75 -> 75.0)
+        confidence_percent = round(confidence * 100, 2)
         
         # 2. Persistance des logs en base de données
         db = SessionLocal()
@@ -234,7 +254,11 @@ def predict(input_data: EmployeeInput):
         finally:
             db.close()
 
-        return {"prediction": prediction_val}
+        # 3. Retour de la réponse enrichie
+        return {
+            "prediction": prediction_val,
+            "probability": confidence_percent
+        }
         
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

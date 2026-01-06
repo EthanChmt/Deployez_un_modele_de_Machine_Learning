@@ -79,7 +79,8 @@ def test_health_check():
 def test_predict_endpoint_success():
     """
     Test fonctionnel du endpoint '/predict' (Cas nominal).
-    Vérifie que l'API accepte une payload valide et retourne une prédiction.
+    Vérifie que l'API accepte une payload valide et retourne une prédiction complète
+    (classe + probabilité).
     """
     with TestClient(app) as client:
         response = client.post("/predict", json=VALID_EMPLOYEE_PAYLOAD)
@@ -89,8 +90,16 @@ def test_predict_endpoint_success():
         
         # Vérification de la structure de la réponse
         json_response = response.json()
+        
+        # Validation du champ 'prediction'
         assert "prediction" in json_response
         assert json_response["prediction"] in [0, 1]
+        
+        # Validation du champ 'probability' (Nouveau critère)
+        assert "probability" in json_response
+        probability = json_response["probability"]
+        assert isinstance(probability, (float, int)), "La probabilité doit être un nombre."
+        assert 0 <= probability <= 100, "La probabilité doit être comprise entre 0 et 100%."
 
 def test_predict_endpoint_validation_error():
     """
