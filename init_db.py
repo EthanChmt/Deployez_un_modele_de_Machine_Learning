@@ -7,11 +7,11 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 # --- Configuration ---
-DB_USER = "postgres"
+DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_HOST = "localhost"
-DB_PORT = "5432"
-DB_NAME = "attrition_db"
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("DB_PORT", "5432")
+DB_NAME = os.getenv("DB_NAME", "attrition_db")
 CSV_FILE_PATH = "data/mon_dataset_final.csv"
 
 # URL de connexion
