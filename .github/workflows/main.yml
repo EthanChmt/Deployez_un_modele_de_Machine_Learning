@@ -37,4 +37,4 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git push https://EthanChmt:$HF_TOKEN@huggingface.co/spaces/EthanChmt/Dev_modele_ML main
+          git push --force https://EthanChmt:$HF_TOKEN@huggingface.co/spaces/EthanChmt/Dev_modele_ML main
