@@ -39,12 +39,34 @@ jobs:
         run: |
           git config --global user.email "action@github.com"
           git config --global user.name "GitHub Action"
+          
+          # 1. Stratégie Orpheline (Clean Slate)
           git checkout --orphan deploy-branch
           git rm -rf --cached .
+          
+          # 2. SOLUTION RADICALE : On écrase le README.md qui bloque
+          # On génère un en-tête valide pour dire à HF "C'est un projet Docker"
+          echo "---" > README.md
+          echo "title: Mon API ML" >> README.md
+          echo "emoji: 🚀" >> README.md
+          echo "colorFrom: blue" >> README.md
+          echo "colorTo: red" >> README.md
+          echo "sdk: docker" >> README.md
+          echo "app_port: 8000" >> README.md
+          echo "---" >> README.md
+          echo "" >> README.md
+          echo "# Documentation API" >> README.md
+          echo "Déploiement automatique via GitHub Actions." >> README.md
+          
+          # 3. Gestion LFS des binaires
           git lfs install
           git lfs track "*.joblib"
           git lfs track "*.png"
           git add .gitattributes
+          
+          # 4. Ajout de tout le reste
           git add .
-          git commit -m "Force Deploy to Hugging Face"
+          
+          # 5. Envoi
+          git commit -m "Deploy with fresh README"
           git push --force https://EthanChmt:$HF_TOKEN@huggingface.co/spaces/EthanChmt/Dev_modele_ML deploy-branch:main
