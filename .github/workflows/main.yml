@@ -33,20 +33,18 @@ jobs:
           fetch-depth: 0
           lfs: true
 
-      # --- C'EST ICI QUE LA MAGIE OPÈRE ---
-      - name: Fix Binary Files (LFS)
-        run: |
-          git config --global user.email "action@github.com"
-          git config --global user.name "GitHub Action"
-          git lfs install
-          git lfs track "*.joblib"
-          git lfs track "*.png"
-          git add .gitattributes
-          git add --renormalize .
-          git commit -m "Convert binaries to LFS for Hugging Face" || echo "Already LFS"
-
       - name: Push to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git push --force https://EthanChmt:$HF_TOKEN@huggingface.co/spaces/EthanChmt/Dev_modele_ML main
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+          git checkout --orphan deploy-branch
+          git rm -rf --cached .
+          git lfs install
+          git lfs track "*.joblib"
+          git lfs track "*.png"
+          git add .gitattributes
+          git add .
+          git commit -m "Force Deploy to Hugging Face"
+          git push --force https://EthanChmt:$HF_TOKEN@huggingface.co/spaces/EthanChmt/Dev_modele_ML deploy-branch:main
